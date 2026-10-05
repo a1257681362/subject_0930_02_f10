@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>养殖成本分摊与批次结转</title>
+    <style>
+        body { font-family: "Microsoft YaHei", Arial, sans-serif; margin: 24px; color: #222; }
+        h1 { font-size: 20px; }
+        h2 { font-size: 16px; margin-top: 28px; }
+        .toolbar { margin: 12px 0; }
+        .toolbar a, .toolbar button { margin-right: 8px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+        th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: right; }
+        th { background: #f0f3f7; }
+        th.txt, td.txt { text-align: left; }
+        .tag { display:inline-block; padding:1px 8px; border-radius:10px; background:#eef; font-size:12px; }
+        .muted { color:#888; font-size:12px; }
+        .finance-only { }
+    </style>
+</head>
+<body>
+<h1>养殖成本分摊与批次结转</h1>
+<div class="muted">
+    当前视图：<span class="tag" th:text="${finance} ? '财务（可见金额）' : '生产（仅汇总，不可见金额）'">视图</span>
+    ｜ 停用池塘：<span th:text="${includeDisabled} ? '包含' : '不包含（默认）'">不包含</span>
+</div>
+
+<div class="toolbar">
+    <a th:href="@{/aqua/cost/carryover(role='FINANCE',includeDisabled=${includeDisabled})}">财务视图</a>
+    <a th:href="@{/aqua/cost/carryover(role='PRODUCTION',includeDisabled=${includeDisabled})}">生产视图</a>
+    <a th:href="@{/aqua/cost/carryover(role=${role},includeDisabled=${!includeDisabled})}"
+       th:text="${includeDisabled} ? '隐藏停用池塘' : '显示停用池塘'">切换停用</a>
+    <a th:href="@{/api/aqua/cost/report/batches.csv(role=${role},includeDisabled=${includeDisabled})}">导出批次CSV</a>
+    <a th:href="@{/api/aqua/cost/report/ponds.csv(role=${role},includeDisabled=${includeDisabled})}">导出池塘CSV</a>
+</div>
+
+<h2>按养殖批次</h2>
+<table>
+    <thead>
+    <tr>
+        <th class="txt">批次编号</th>
+        <th class="txt">品种</th>
+        <th class="txt">池塘</th>
+        <th class="txt">池塘状态</th>
+        <th class="txt">批次状态</th>
+        <th class="txt">成本状态</th>
+        <th>数量</th>
+        <th>生物量(kg)</th>
+        <th th:if="${finance}">饲料</th>
+        <th th:if="${finance}">人工</th>
+        <th th:if="${finance}">药品</th>
+        <th th:if="${finance}">能源</th>
+        <th th:if="${finance}">总成本</th>
+        <th th:if="${finance}">单位成本</th>
+        <th th:unless="${finance}">归集笔数</th>
+        <th th:unless="${finance}">分摊次数</th>
+        <th class="txt">结转日期</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="r : ${batchRows}">
+        <td class="txt" th:text="${r.batchNo}"></td>
+        <td class="txt" th:text="${r.species}"></td>
+        <td class="txt" th:text="${r.pondCode} + ' ' + ${r.pondName}"></td>
+        <td class="txt" th:text="${r.pondStatus}"></td>
+        <td class="txt" th:text="${r.batchStatus}"></td>
+        <td class="txt" th:text="${r.costStatus}"></td>
+        <td th:text="${r.quantity}"></td>
+        <td th:text="${r.biomassKg}"></td>
+        <td th:if="${finance}" th:text="${r.feedAmount}"></td>
+        <td th:if="${finance}" th:text="${r.laborAmount}"></td>
+        <td th:if="${finance}" th:text="${r.medicineAmount}"></td>
+        <td th:if="${finance}" th:text="${r.energyAmount}"></td>
+        <td th:if="${finance}" th:text="${r.totalAmount}"></td>
+        <td th:if="${finance}" th:text="${r.unitCost}"></td>
+        <td th:unless="${finance}" th:text="${r.entryCount}"></td>
+        <td th:unless="${finance}" th:text="${r.transferCount}"></td>
+        <td class="txt" th:text="${r.carryoverDate}"></td>
+    </tr>
+    <tr th:if="${#lists.isEmpty(batchRows)}">
+        <td colspan="16" class="txt muted">无数据（可能因落点池塘已停用且默认隐藏，可点“显示停用池塘”查看）</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>按池塘汇总</h2>
+<table>
+    <thead>
+    <tr>
+        <th class="txt">池塘编号</th>
+        <th class="txt">池塘名称</th>
+        <th class="txt">池塘状态</th>
+        <th th:if="${finance}">饲料</th>
+        <th th:if="${finance}">人工</th>
+        <th th:if="${finance}">药品</th>
+        <th th:if="${finance}">能源</th>
+        <th th:if="${finance}">总成本</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="p : ${pondRows}">
+        <td class="txt" th:text="${p.pondCode}"></td>
+        <td class="txt" th:text="${p.pondName}"></td>
+        <td class="txt" th:text="${p.pondStatus}"></td>
+        <td th:if="${finance}" th:text="${p.feedAmount}"></td>
+        <td th:if="${finance}" th:text="${p.laborAmount}"></td>
+        <td th:if="${finance}" th:text="${p.medicineAmount}"></td>
+        <td th:if="${finance}" th:text="${p.energyAmount}"></td>
+        <td th:if="${finance}" th:text="${p.totalAmount}"></td>
+    </tr>
+    <tr th:if="${#lists.isEmpty(pondRows)}">
+        <td colspan="8" class="txt muted">无数据</td>
+    </tr>
+    </tbody>
+</table>
+</body>
+</html>

@@ -14,7 +14,7 @@
 
 ## 海水养殖台账（aqua-1）
 
-模块包路径 `com.evops.aqua`，已打通：建池 → 投苗 → 日常记录 → 饲料/用药 → 抽检 → 换池 → 出池。成本核算留待后续版本。
+模块包路径 `com.evops.aqua`，已打通：建池 → 投苗 → 日常记录 → 饲料/用药 → 抽检 → 换池 → 出池。成本核算见 aqua-10。
 
 - 养殖池档案：水深、盐度、所属海区（`POST /api/aqua/ponds`）
 - 投苗批次：苗种来源、入池数量、计划出池日；批次编号全局唯一（`POST /api/aqua/batches`）
@@ -134,3 +134,19 @@
 - 全程留证：设备登记/更换、规则版本发布与停用、上传归并、迟到拒绝、复核、日报审核、隔离均写 `t_sensor_change_evidence`（含操作前后快照与幂等请求号），可经 `GET /api/aqua/sensor/evidence` 按对象或 requestId 追溯。
 
 验收：`mvn test -Dtest=SensorIngestAcceptanceTest`，15 个检查点逐段输出报告，失败即停并给出停点。
+
+## 养殖成本分摊与批次结转（aqua-10）
+
+模块包路径 `com.evops.aqua.cost`，在台账之上打通：四类成本凭证 → 饲料/人工/药品/能源按池塘和批次归集 → 转池按数量+生物量分摊未结成本 → 出池同事务形成不可变结转快照 → 实盘差异待审核 → 财务/生产分角色视图，停用养殖对象后页面/导出/后台同口径，全程留证。
+
+- 成本凭证（`POST /api/aqua/cost/vouchers`）：四类（FEED 饲料 / LABOR 人工 / MEDICINE 药品 / ENERGY 能源）财务凭据；**任何成本金额都必须引用一条 ACTIVE 凭证**，凭证只作废（`POST /{id}/revoke`）不删除；requestId 幂等。
+- 成本归集（`POST /api/aqua/cost/entries`）：按池按批一行一笔；DIRECT 当期归集与 BACKFILL 人工补录都**必须引用有效且类别一致的凭证**（补录金额不得超过凭证额度，作废凭证一律拒用）；只能对在养、未结转、当前就在该有效池的批次归集。
+- 转池成本分摊（`POST /api/aqua/cost/transfers/allocate`）：针对台账转池记录，按各落点「数量占比×0.5 + 生物量占比×0.5」分摊全部未结成本（生物量合计为0退化为只按数量；各落点数量合计须等于转池记录数量），尾差并入末腿保证**金额守恒**；分摊后原归集行与既往分配腿一次性关闭，余额由新腿承接不重复计；同转池记录/requestId 幂等。
+- 出池结转（台账 `POST /api/aqua/batches/{id}/harvest` 自动触发）：**出池事务提交前在同一事务形成不可变结转快照**（`t_cost_carryover` + 按池塘×类别冻结明细），含四类金额、总额、单位成本（总额/出池数量）、生物量；快照失败出池一并回滚。
+- 已结转封存：**已结转批次不能再被任何新成本单据/转池分摊单改写**——再归集、漏分摊出池后的补分摊一律拒绝，快照金额永不回改。
+- 成本差异（`POST /api/aqua/cost/variances`）：实盘与账面（已结转取快照、未结转取未结台账）一致不开单，不一致一律 PENDING 待审核；`POST /{id}/approve|reject` **审核人与意见缺一不可，审核只改差异单状态，绝不回改快照与归集行**。
+- 角色视图（`GET /api/aqua/cost/report/batches?role=FINANCE|PRODUCTION`）：**财务 FINANCE 看四类金额/总额/单位成本；生产 PRODUCTION 响应中根本不含任何金额字段**，只看数量、生物量、归集笔数、分摊次数等汇总，两角色行集合一致。
+- 同口径三端：页面 `/aqua/cost/carryover`、导出 `GET /api/aqua/cost/report/batches.csv` 与 `/ponds.csv`、后台 JSON 共用同一 `CostReportService`——**行集合、金额口径、停用池塘过滤（`includeDisabled` 默认 false）完全一致**；养殖对象置无效（`POST /api/aqua/cost/ponds/{id}/disable`）后默认三端同口径隐藏，历史快照保留不删，显式 `includeDisabled=true` 三端同口径恢复；另有池塘汇总 `/report/ponds`。
+- 全程留证：凭证登记/作废、归集/补录、转池分摊、出池结转、差异提报/通过/驳回、池塘停用/启用均写 `t_cost_change_evidence`（含操作者、前后快照、幂等请求号），可经 `GET /api/aqua/cost/evidence` 按对象或 requestId 追溯。
+
+验收：`mvn test -Dtest=CostAllocationCarryoverAcceptanceTest`，12 个检查点逐段输出报告，失败即停并给出停点。

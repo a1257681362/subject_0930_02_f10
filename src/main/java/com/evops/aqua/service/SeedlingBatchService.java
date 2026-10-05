@@ -9,11 +9,13 @@ import com.evops.aqua.entity.HarvestRecord;
 import com.evops.aqua.entity.Pond;
 import com.evops.aqua.entity.SeedlingBatch;
 import com.evops.aqua.entity.TransferRecord;
+import com.evops.aqua.event.BatchHarvestedEvent;
 import com.evops.aqua.mapper.HarvestRecordMapper;
 import com.evops.aqua.mapper.SeedlingBatchMapper;
 import com.evops.aqua.mapper.TransferRecordMapper;
 import com.evops.aqua.med.service.MedWithdrawalGuard;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,19 +35,22 @@ public class SeedlingBatchService {
     private final HarvestRecordMapper harvestRecordMapper;
     private final IsolationGuard isolationGuard;
     private final MedWithdrawalGuard medWithdrawalGuard;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SeedlingBatchService(SeedlingBatchMapper batchMapper,
                                 PondService pondService,
                                 TransferRecordMapper transferRecordMapper,
                                 HarvestRecordMapper harvestRecordMapper,
                                 IsolationGuard isolationGuard,
-                                MedWithdrawalGuard medWithdrawalGuard) {
+                                MedWithdrawalGuard medWithdrawalGuard,
+                                ApplicationEventPublisher eventPublisher) {
         this.batchMapper = batchMapper;
         this.pondService = pondService;
         this.transferRecordMapper = transferRecordMapper;
         this.harvestRecordMapper = harvestRecordMapper;
         this.isolationGuard = isolationGuard;
         this.medWithdrawalGuard = medWithdrawalGuard;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -116,6 +121,9 @@ public class SeedlingBatchService {
 
         batch.setStatus(SeedlingBatch.STATUS_HARVESTED);
         batchMapper.updateById(batch);
+
+        // 出池事务提交前发布事件：成本模块在同一事务内形成结转快照，快照失败则出池一并回滚。
+        eventPublisher.publishEvent(new BatchHarvestedEvent(batch.getId(), record.getId(), record.getPondId()));
         return record;
     }
 
