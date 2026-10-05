@@ -1,6 +1,7 @@
 package com.evops.aqua.controller;
 
 import com.evops.aqua.dto.PondCreateRequest;
+import com.evops.aqua.dto.PondDisableRequest;
 import com.evops.aqua.entity.Pond;
 import com.evops.aqua.service.PondService;
 import com.evops.common.ApiResponse;
@@ -40,5 +41,15 @@ public class PondController {
     @GetMapping("/{id}")
     public ApiResponse<Pond> detail(@PathVariable Long id) {
         return ApiResponse.ok(pondService.getOrThrow(id));
+    }
+
+    /**
+     * 将海水养殖管理对象置为无效：历史数据保留不删，
+     * 成本分摊页面/导出/后台报表随后同口径不再统计该池。
+     */
+    @PostMapping("/{id}/disable")
+    public ApiResponse<Pond> disable(@PathVariable Long id,
+                                     @Validated @RequestBody PondDisableRequest request) {
+        return ApiResponse.ok(pondService.disable(id, request));
     }
 }

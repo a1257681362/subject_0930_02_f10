@@ -14,13 +14,16 @@ import com.evops.aqua.disease.mapper.DiseaseStockMovementMapper;
 import com.evops.aqua.entity.Pond;
 import com.evops.aqua.entity.SeedlingBatch;
 import com.evops.aqua.entity.TransferRecord;
+import com.evops.aqua.event.BatchTransferredEvent;
 import com.evops.aqua.mapper.SeedlingBatchMapper;
 import com.evops.aqua.mapper.TransferRecordMapper;
 import com.evops.aqua.service.PondService;
 import com.evops.aqua.service.SeedlingBatchService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -44,6 +47,7 @@ public class DiseaseIsolationService {
     private final SeedlingBatchMapper batchMapper;
     private final TransferRecordMapper transferRecordMapper;
     private final PondService pondService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public DiseaseIsolationService(DiseaseIsolationMapper isolationMapper,
                                    DiseaseObservationMapper observationMapper,
@@ -55,7 +59,8 @@ public class DiseaseIsolationService {
                                    SeedlingBatchService seedlingBatchService,
                                    SeedlingBatchMapper batchMapper,
                                    TransferRecordMapper transferRecordMapper,
-                                   PondService pondService) {
+                                   PondService pondService,
+                                   ApplicationEventPublisher eventPublisher) {
         this.isolationMapper = isolationMapper;
         this.observationMapper = observationMapper;
         this.movementMapper = movementMapper;
@@ -67,6 +72,7 @@ public class DiseaseIsolationService {
         this.batchMapper = batchMapper;
         this.transferRecordMapper = transferRecordMapper;
         this.pondService = pondService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -253,10 +259,18 @@ public class DiseaseIsolationService {
         record.setToPondId(toPondId);
         record.setTransferDate(date);
         record.setQuantity(quantity);
+        record.setBiomassKg(batch.getBiomassKg() == null ? BigDecimal.ZERO : batch.getBiomassKg());
         record.setReason(reason);
         transferRecordMapper.insert(record);
         batch.setPondId(toPondId);
         batchMapper.updateById(batch);
+        // 隔离调度/解除也是整批换池：成本账随批次走（同事务），事件口径与台账换池一致。
+        eventPublisher.publishEvent(new BatchTransferredEvent(
+                record.getId(), batch.getId(), batch.getId(), batch.getBatchNo(),
+                fromPondId, toPondId, date,
+                quantity, 0,
+                record.getBiomassKg(), BigDecimal.ZERO, false,
+                "TRANSFER-" + record.getId(), "ISOLATION"));
     }
 
     private DiseaseIsolation copyOf(DiseaseIsolation source) {

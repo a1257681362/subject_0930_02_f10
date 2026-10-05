@@ -4,10 +4,12 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
  * 投苗请求：生成原始投苗单（批次编号全局唯一）。
+ * biomassKg 为投苗时估计生物量，可空（默认0），后续可按抽检核定更新。
  */
 public class BatchStockRequest {
 
@@ -30,6 +32,9 @@ public class BatchStockRequest {
     @Min(value = 1, message = "入池数量必须大于0")
     private Integer quantity;
 
+    @Min(value = 0, message = "生物量不能为负")
+    private BigDecimal biomassKg;
+
     @NotNull(message = "投苗日期不能为空")
     private LocalDate stockDate;
 
@@ -48,6 +53,8 @@ public class BatchStockRequest {
     public void setSeedSource(String seedSource) { this.seedSource = seedSource; }
     public Integer getQuantity() { return quantity; }
     public void setQuantity(Integer quantity) { this.quantity = quantity; }
+    public BigDecimal getBiomassKg() { return biomassKg; }
+    public void setBiomassKg(BigDecimal biomassKg) { this.biomassKg = biomassKg; }
     public LocalDate getStockDate() { return stockDate; }
     public void setStockDate(LocalDate stockDate) { this.stockDate = stockDate; }
     public LocalDate getPlannedHarvestDate() { return plannedHarvestDate; }

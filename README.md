@@ -14,7 +14,7 @@
 
 ## 海水养殖台账（aqua-1）
 
-模块包路径 `com.evops.aqua`，已打通：建池 → 投苗 → 日常记录 → 饲料/用药 → 抽检 → 换池 → 出池。成本核算留待后续版本。
+模块包路径 `com.evops.aqua`，已打通：建池 → 投苗 → 日常记录 → 饲料/用药 → 抽检 → 换池（支持分池）→ 出池。成本核算见 aqua-10。
 
 - 养殖池档案：水深、盐度、所属海区（`POST /api/aqua/ponds`）
 - 投苗批次：苗种来源、入池数量、计划出池日；批次编号全局唯一（`POST /api/aqua/batches`）
@@ -134,3 +134,18 @@
 - 全程留证：设备登记/更换、规则版本发布与停用、上传归并、迟到拒绝、复核、日报审核、隔离均写 `t_sensor_change_evidence`（含操作前后快照与幂等请求号），可经 `GET /api/aqua/sensor/evidence` 按对象或 requestId 追溯。
 
 验收：`mvn test -Dtest=SensorIngestAcceptanceTest`，15 个检查点逐段输出报告，失败即停并给出停点。
+
+## 养殖成本分摊与批次结转（aqua-10）
+
+模块包路径 `com.evops.aqua.cost`，打通：财务凭证 → 饲料/人工/药品/能源按池按批归集 → 转池按数量与生物量权重分配未结成本 → 出池结转不可变快照 → 差异待审核 → 角色分视图与同口径报表，全程留证。
+
+- 财务凭证（`POST /api/aqua/cost/vouchers`，requestId 幂等）：**人工补录必须先登记并引用有效凭证号**——无凭证号、凭证不存在或已作废的补录一律拒绝，且不落任何费用行。
+- 费用归集（`POST /api/aqua/cost/entries`，requestId 幂等）：FEED/LABOR/MED/ENERGY 四类按「池+批」归集，凭条只追加；批次不在该池或**已出池结转一律拒绝**——已结转批次不能被新单据悄悄改写。
+- 转池分配：台账换池 `POST /api/aqua/batches/{id}/transfer` 扩展支持分池（传小于在养数量的 `quantity` 与转出 `biomassKg`，目标池自动派生接收批次，源批核减留存）。成本模块同事务监听：**整批转移未结成本 100% 随批走不重算金额**；**分池按 50% 数量权重 + 50% 生物量权重分配**（生物量全为 0 时退化为纯数量权重），权重与分配额冻结在 `t_cost_transfer_line`，接收批补 CARRYOVER 凭条可逐笔追溯。生物量经 `POST /api/aqua/batches/{id}/biomass` 核定；疫病隔离调度/解除同样触发成本账随批移动。
+- 出池结转（`POST /api/aqua/batches/{id}/harvest` 自动触发）：在养未结成本全部结转，**形成不可变快照**（头 + 逐费用类型行 + JSON 快照），余额清零；之后费用凭条与差异单均无法改写该批。
+- 差异调整（`POST /api/aqua/cost/adjustments`，requestId 幂等）：账面修正只能走差异单，建单即 **PENDING 待审核**；`POST /{id}/approve` 审核人与意见缺一不可（缺则停留待审核），通过后才入余额并补凭条，驳回不动账；重复审核幂等；核减超余额、已结转批次均拦截。
+- 角色视图（`GET /api/aqua/cost/allocation-report?role=FINANCE|PRODUCTION`、`/batches/{id}`、`/export`）：**财务（FINANCE）看金额与凭证；生产（PRODUCTION）只看数量/生物量/单据数等汇总，任何金额与凭证号字段不下发**，凭条、差异单、凭证列表同样按角色脱敏。
+- **池塘置为无效同口径**（`POST /api/aqua/ponds/{id}/disable`，原因必填）：页面（JSON）、CSV 导出与后台聚合共用同一 `loadRows` 查询，默认**只统计 ACTIVE 池塘**，停用后三个出口同时不再出现该池数据并留 DISABLE 证据；历史费用凭条、结转快照一律保留不删；显式 `includeDisabled=true` 三口径仍一致地放开。
+- 全程留证：凭证/归集/转池分配/出池结转/差异审核/池塘停用均写 `t_cost_change_evidence`，可经 `GET /api/aqua/cost/evidence` 按对象或 requestId 追溯。
+
+验收：`mvn test -Dtest=CostAllocationCarryoverAcceptanceTest`，12 个检查点逐段输出报告，失败即停并给出停点。

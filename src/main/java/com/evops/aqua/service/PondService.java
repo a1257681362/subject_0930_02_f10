@@ -2,11 +2,16 @@ package com.evops.aqua.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.evops.aqua.dto.PondCreateRequest;
+import com.evops.aqua.dto.PondDisableRequest;
 import com.evops.aqua.entity.Pond;
+import com.evops.aqua.event.PondDisabledEvent;
 import com.evops.aqua.mapper.PondMapper;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -16,9 +21,11 @@ import java.util.List;
 public class PondService {
 
     private final PondMapper pondMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public PondService(PondMapper pondMapper) {
+    public PondService(PondMapper pondMapper, ApplicationEventPublisher eventPublisher) {
         this.pondMapper = pondMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public Pond create(PondCreateRequest request) {
@@ -50,5 +57,21 @@ public class PondService {
         if (!Pond.STATUS_ACTIVE.equals(pond.getStatus())) {
             throw new IllegalArgumentException("养殖池已停用，不能投苗或换入：" + pond.getPondCode());
         }
+    }
+
+    /**
+     * 将养殖管理对象（池塘）置为无效。
+     * 不删除任何历史数据；发布停用事件，成本报表/页面/导出随后同口径不再统计该池。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Pond disable(Long id, PondDisableRequest request) {
+        Pond pond = getOrThrow(id);
+        pond.setStatus(Pond.STATUS_DISABLED);
+        pond.setDisabledReason(request.getReason());
+        pond.setDisabledTime(LocalDateTime.now());
+        pondMapper.updateById(pond);
+        eventPublisher.publishEvent(new PondDisabledEvent(pond.getId(), request.getReason(),
+                request.getOperator()));
+        return pond;
     }
 }

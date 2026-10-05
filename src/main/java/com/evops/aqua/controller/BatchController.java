@@ -2,6 +2,7 @@ package com.evops.aqua.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.evops.aqua.dto.BatchStockRequest;
+import com.evops.aqua.dto.BiomassUpdateRequest;
 import com.evops.aqua.dto.HarvestRequest;
 import com.evops.aqua.dto.TransferRequest;
 import com.evops.aqua.entity.HarvestRecord;
@@ -80,6 +81,13 @@ public class BatchController {
     public ApiResponse<HarvestRecord> harvest(@PathVariable Long id,
                                               @Validated @RequestBody HarvestRequest request) {
         return ApiResponse.ok(batchService.harvest(id, request));
+    }
+
+    /** 核定批次当前估计生物量，作为后续转池成本分配的生物量权重。 */
+    @PostMapping("/{id}/biomass")
+    public ApiResponse<SeedlingBatch> updateBiomass(@PathVariable Long id,
+                                                    @Validated @RequestBody BiomassUpdateRequest request) {
+        return ApiResponse.ok(batchService.updateBiomass(id, request));
     }
 
     /**

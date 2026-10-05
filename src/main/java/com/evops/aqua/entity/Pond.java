@@ -4,9 +4,12 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.evops.common.BaseEntity;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 养殖池档案：水深、盐度、所属海区。
+ * status=DISABLED 表示管理对象置为无效：成本分摊页面/导出/后台报表同口径不再统计，
+ * 历史费用凭条与结转快照保留不删。
  */
 @TableName("t_pond")
 public class Pond extends BaseEntity {
@@ -21,6 +24,8 @@ public class Pond extends BaseEntity {
     private BigDecimal waterAreaM2;
     private BigDecimal salinityPpt;
     private String status;
+    private String disabledReason;
+    private LocalDateTime disabledTime;
     private String remark;
 
     public String getPondCode() { return pondCode; }
@@ -37,6 +42,10 @@ public class Pond extends BaseEntity {
     public void setSalinityPpt(BigDecimal salinityPpt) { this.salinityPpt = salinityPpt; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getDisabledReason() { return disabledReason; }
+    public void setDisabledReason(String disabledReason) { this.disabledReason = disabledReason; }
+    public LocalDateTime getDisabledTime() { return disabledTime; }
+    public void setDisabledTime(LocalDateTime disabledTime) { this.disabledTime = disabledTime; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
 }
